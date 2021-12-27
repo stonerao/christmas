@@ -1,4 +1,6 @@
-# Three.js Journey
+# 
+
+![img](https://github.com/stonerao/christmas/blob/master/img.jpg)
 
 ## Setup
 Download [Node.js](https://nodejs.org/en/download/).
