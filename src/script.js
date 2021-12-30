@@ -3,30 +3,13 @@ import Stats from 'three/examples/jsm/libs/stats.module.js';
 import {
     OrbitControls
 } from 'three/examples/jsm/controls/OrbitControls.js';
-import {
-    GLTFLoader
-} from 'three/examples/jsm/loaders/GLTFLoader.js'
-import {
-    DRACOLoader
-} from 'three/examples/jsm/loaders/DRACOLoader.js'
+
 import {
     BasisTextureLoader
 } from 'three/examples/jsm/loaders/BasisTextureLoader.js'
-import {
-    EffectComposer
-} from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import {
-    RenderPass
-} from 'three/examples/jsm/postprocessing/RenderPass.js';
-import {
-    ShaderPass
-} from 'three/examples/jsm/postprocessing/ShaderPass.js';
-import {
-    UnrealBloomPass
-} from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import {
-    FXAAShader
-} from 'three/examples/jsm/shaders/FXAAShader.js'
+
+import loader from './/loader';
+import composer from './composer';
 
 const time = { value: 0 }
 
@@ -106,11 +89,6 @@ const flameMaterial = () => {
     return material;
 }
 
-const params = {
-    bloomStrength: 0.4,
-    bloomThreshold: 0,
-    bloomRadius: 0
-};
 
 let instance;
 
@@ -119,9 +97,9 @@ const renderer = new THREE.WebGLRenderer({
 });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
-// renderer.toneMapping = THREE.ReinhardToneMapping;
 renderer.outputEncoding = THREE.sRGBEncoding
 renderer.setClearColor(0x020202, 1.0);
+
 document.body.appendChild(renderer.domElement);
 
 const stats = new Stats();
@@ -137,38 +115,13 @@ controls.maxPolarAngle = Math.PI * 0.5;
 controls.minDistance = 1;
 controls.maxDistance = 400;
 controls.target.set(0.009454812370159374, 0.77820012624936, -0.39288687465154853);
- 
-scene.add(new THREE.AmbientLight(0xffffff));
 
-// --
-const renderScene = new RenderPass(scene, camera);
+const light = new THREE.AmbientLight(0xffffff)
+scene.add(light);
 
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-bloomPass.threshold = params.bloomThreshold;
-bloomPass.strength = params.bloomStrength;
-bloomPass.radius = params.bloomRadius; 
+const bloomComposer = composer(renderer, scene, camera);
 
-const effectFXAA = new ShaderPass(FXAAShader)
-effectFXAA.uniforms.resolution.value.set(1 / window.innerWidth, 1 / window.innerHeight)
 
-const bloomComposer = new EffectComposer(renderer);
-bloomComposer.renderToScreen = true;
-bloomComposer.addPass(renderScene);
-bloomComposer.addPass(bloomPass);
- 
-
-const basisLoader = new BasisTextureLoader();
-basisLoader.setTranscoderPath('./basis/');
-basisLoader.detectSupport(renderer);
-const loadBasisu = (url) => {
-    return new Promise((resolve, reject) => {
-        basisLoader.load(`./textures/${url}`, (texture) => {
-            return resolve(texture);
-        })
-    }, (err) => {
-        reject(err)
-    })
-}
 
 window.onresize = function () {
 
@@ -211,31 +164,28 @@ const basisMap = {
 const playMusic = () => {
     const listener = new THREE.AudioListener();
     camera.add(listener);
- 
-    const audio = new THREE.Audio(listener); 
+
+    const audio = new THREE.Audio(listener);
 
     const loader = new THREE.AudioLoader();
-    loader.load('./music.mp3', function (buffer) { 
+    loader.load('./music.mp3', function (buffer) {
         audio.setBuffer(buffer);
-        audio.play(); 
+        audio.play();
     });
 }
+
+loader.setValues({
+    renderer
+});
+
+loader.setDecoderPath('./draco/gltf/');
+loader.setTranscoderPath('./basis/');
+ 
 // 
 const count = 1000;
-const dummy = new THREE.Object3D(); 
+const dummy = new THREE.Object3D();
 
-const gltfLoader = new GLTFLoader()
-const dracoLoader = new DRACOLoader();
-dracoLoader.setDecoderPath('./draco/gltf/');
-gltfLoader.setDRACOLoader(dracoLoader);
 
-const loadModel = (url) => {
-    return new Promise((resolve, reject) => {
-        gltfLoader.load(url, (object) => {
-            resolve(object.scene);
-        })
-    })
-}
 const range = [-50, 50]
 
 const snowflakeRandomPosition = (time) => {
@@ -247,11 +197,12 @@ const snowflakeRandomPosition = (time) => {
 }
 
 function setupScene() {
-    loadModel('./christmas-props.-dracogltf.gltf').then((object) => {
+    loader.loadModel('./christmas-props.-dracogltf.gltf').then((object) => {
         scene.add(object);
 
         const lightPoint = [];
         const rMapArray = rMap.map((e) => e.name);
+
         object.traverse((child) => {
             if (child.material) {
                 const { material } = child;
@@ -272,7 +223,7 @@ function setupScene() {
                     if (basisMap[tdata.texture]) {
                         child.material.map = basisMap[tdata.texture]
                     } else {
-                        loadBasisu(tdata.texture).then((texture) => {
+                        loader.loadBasis(`./textures/${tdata.texture}`).then((texture) => {
                             basisMap[tdata.texture] = texture;
                             texture.encoding = THREE.sRGBEncoding;
                             child.material.map = basisMap[tdata.texture];
@@ -298,10 +249,7 @@ function setupScene() {
                     child.material.color.setStyle('#ffffff');
                     child.scale.multiplyScalar(1.5);
                     lightPoint.push(child);
-                }
-
-                // basis
-
+                }  
             }
         })
 
@@ -318,14 +266,14 @@ function setupScene() {
                 elem.material.color.setStyle(color[Math.floor(Math.random() * color.length)])
             })
         }, 1000)
-        
+
         setTimeout(() => {
             playMusic();
         }, 6000)
     })
 
     // 加载雪花
-    loadModel('./real-snowflake.quads.gltf').then((object) => {
+    loader.loadModel('./real-snowflake.quads.gltf').then((object) => {
         // 随机位置出现雪花.children
 
         const mesh = object.children[0];
@@ -335,8 +283,6 @@ function setupScene() {
         mesh.material.setValues({
             metalness: 0.2
         });
-
-
 
         instance = new THREE.InstancedMesh(mesh.geometry, mesh.material, count);
 
@@ -351,17 +297,13 @@ function setupScene() {
 
         instance.userData.data = infos;
 
-
         scene.add(instance);
     })
 
 }
 
-
-
 function render(dt = 0.15) {
     bloomComposer.render();
-
     if (instance) {
         const { data } = instance.userData;
         for (let i = 0; i < count; i++) {
@@ -371,7 +313,7 @@ function render(dt = 0.15) {
             dummy.position.copy(position)
 
             dummy.lookAt(camera.position);
-            dummy.rotation.z = rotation.z + position.y ;
+            dummy.rotation.z = rotation.z + position.y;
             dummy.updateMatrix();
 
             instance.setMatrixAt(i++, dummy.matrix);
@@ -390,15 +332,13 @@ function render(dt = 0.15) {
         instance.instanceMatrix.needsUpdate = true;
     };
 }
-
-
 const clock = new THREE.Clock()
 
-const tick = () => { 
+const tick = () => {
     const dt = clock.getDelta();
- 
+
     controls.update()
- 
+
     render(dt);
 
     time.value += dt;
