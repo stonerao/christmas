@@ -16,7 +16,7 @@ gltfLoader.setDRACOLoader(dracoLoader);
 
 class Loader {
     constructor() {
-        
+
     }
 
     setValues(config) {
@@ -41,7 +41,6 @@ class Loader {
     loadModel(url) {
         return new Promise((resolve, reject) => {
             gltfLoader.load(url, (object) => {
-                console.log(object)
                 resolve(object.scene);
             })
         })
